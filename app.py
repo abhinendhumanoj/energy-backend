@@ -3,8 +3,9 @@ from flask_cors import CORS
 import pandas as pd
 import os
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import r2_score
+import numpy as np
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": ["https://effervescent-longma-22d301.netlify.app"]}})
@@ -13,8 +14,10 @@ UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 current_df = pd.DataFrame()
-consumption_model = None
+energy_model = None
 bill_model = None
+scaler_X = MinMaxScaler()
+scaler_y = MinMaxScaler()
 chat_memory = []
 
 
@@ -26,7 +29,7 @@ def home():
 # ================= CSV UPLOAD ================= #
 @app.route("/api/upload", methods=["POST"])
 def upload_csv():
-    global current_df, consumption_model, bill_model
+    global current_df, energy_model, bill_model, scaler_X, scaler_y
     file = request.files.get("file")
 
     if not file:
@@ -35,13 +38,8 @@ def upload_csv():
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
-    available_months = [
-        "October 2025", "November 2025", "December 2025", "January 2026"
-    ]
-
     try:
-        df = pd.read_csv(filepath, encoding_errors="ignore")
-        df = df.dropna(how="all")
+        df = pd.read_csv(filepath, encoding_errors="ignore").dropna(how="all")
         df.columns = [c.strip().lower() for c in df.columns]
 
         month_col = next((c for c in df.columns if "month" in c), None)
@@ -62,27 +60,27 @@ def upload_csv():
 
         df["Consumption_kWh"] = pd.to_numeric(df["Consumption_kWh"], errors="coerce").fillna(0)
         df["Bill_Amount"] = pd.to_numeric(df["Bill_Amount"], errors="coerce").fillna(0)
-        df["Month"] = df["Month"].fillna("Unknown")
+        df = df.reset_index(drop=True)
+
+        # Convert month order numerically
+        df["Month_Index"] = np.arange(1, len(df) + 1)
 
         current_df = df.copy()
 
-        # Train models
-        if len(df) > 3:
-            X = df.index.values.reshape(-1, 1)
-            y_energy = df["Consumption_kWh"]
-            y_bill = df["Bill_Amount"]
+        # Train multi-feature regression
+        X = df[["Month_Index", "Consumption_kWh"]]
+        y = df["Bill_Amount"].values.reshape(-1, 1)
 
-            X_train, X_test, y_train, y_test = train_test_split(X, y_energy, test_size=0.2, random_state=42)
-            X_train2, X_test2, y2_train, y2_test = train_test_split(X, y_bill, test_size=0.2, random_state=42)
+        scaler_X.fit(X)
+        scaler_y.fit(y)
 
-            consumption_model = LinearRegression().fit(X_train, y_train)
-            bill_model = LinearRegression().fit(X_train2, y2_train)
+        X_scaled = scaler_X.transform(X)
+        y_scaled = scaler_y.transform(y)
 
-            acc_energy = r2_score(y_test, consumption_model.predict(X_test)) * 100
-            acc_bill = r2_score(y2_test, bill_model.predict(X_test2)) * 100
-            accuracy = round((acc_energy + acc_bill) / 2, 2)
-        else:
-            accuracy = 0
+        bill_model = LinearRegression().fit(X_scaled, y_scaled)
+        energy_model = LinearRegression().fit(df[["Month_Index"]], df["Consumption_kWh"])
+
+        accuracy = round(r2_score(y_scaled, bill_model.predict(X_scaled)) * 100, 2)
 
         metrics = {
             "totalEnergy": round(df["Consumption_kWh"].sum(), 2),
@@ -90,9 +88,11 @@ def upload_csv():
             "accuracy": accuracy
         }
 
+        available_months = ["November 2025", "December 2025", "January 2026", "February 2026"]
+
         return jsonify({
             "ok": True,
-            "message": "✅ CSV uploaded successfully and models trained!",
+            "message": "✅ Data uploaded & models trained successfully!",
             "metrics": metrics,
             "data": df.to_dict(orient="records"),
             "available_months": available_months
@@ -105,39 +105,38 @@ def upload_csv():
 # ================= PREDICT ================= #
 @app.route("/api/predict", methods=["POST"])
 def predict():
-    global current_df, consumption_model, bill_model
-    if current_df.empty or consumption_model is None or bill_model is None:
-        return jsonify({"ok": False, "message": "⚠️ Upload a CSV before predicting!"})
+    global current_df, energy_model, bill_model, scaler_X, scaler_y
+
+    if current_df.empty or bill_model is None:
+        return jsonify({"ok": False, "message": "⚠️ Please upload a dataset first."})
 
     try:
         data = request.get_json()
         month_name = data.get("month")
 
-        if not month_name:
-            return jsonify({"ok": False, "message": "❌ Please provide a month name!"})
+        next_index = len(current_df) + 1
+        last_consumption = current_df["Consumption_kWh"].iloc[-1]
+        trend = current_df["Consumption_kWh"].pct_change().mean()  # avg monthly growth %
+        predicted_consumption = last_consumption * (1 + trend if not np.isnan(trend) else 0.01)
 
-        next_index = len(current_df)
+        # Predict next month’s bill using both month index + predicted consumption
+        X_future = np.array([[next_index, predicted_consumption]])
+        X_scaled = scaler_X.transform(X_future)
+        predicted_bill_scaled = bill_model.predict(X_scaled)
+        predicted_bill = scaler_y.inverse_transform(predicted_bill_scaled)[0][0]
 
-        predicted_consumption = consumption_model.predict([[next_index]])[0]
-        predicted_bill = bill_model.predict([[next_index]])[0]
-
-        # Smooth out using recent 3-month average to avoid spikes
+        # Weighted average with last 3 months to reduce spikes
         if len(current_df) >= 3:
-            recent_bills = current_df["Bill_Amount"].tail(3).mean()
-            predicted_bill = (predicted_bill + recent_bills) / 2
+            recent_avg_bill = current_df["Bill_Amount"].tail(3).mean()
+            predicted_bill = (predicted_bill * 0.7) + (recent_avg_bill * 0.3)
 
-        # Month-over-month growth tracking
-        growth_rate = 0
-        if len(current_df) > 1:
-            last_bill = current_df["Bill_Amount"].iloc[-1]
-            second_last_bill = current_df["Bill_Amount"].iloc[-2]
-            if second_last_bill > 0:
-                growth_rate = ((last_bill - second_last_bill) / second_last_bill) * 100
+        growth_rate = ((predicted_bill - current_df["Bill_Amount"].iloc[-1]) /
+                       current_df["Bill_Amount"].iloc[-1]) * 100 if current_df["Bill_Amount"].iloc[-1] else 0
 
         precautions = [
-            "🔋 Optimize high-load hours to reduce peaks.",
-            "⚙️ Perform equipment maintenance to sustain efficiency.",
-            "📊 Analyze last 3 months for usage optimization."
+            "🧩 Monitor heavy equipment cycles to control spikes.",
+            "💡 Implement energy-efficient scheduling.",
+            "📉 Predicted rise in cost can be mitigated with load balancing."
         ]
 
         return jsonify({
@@ -156,20 +155,17 @@ def predict():
 # ================= RETRAIN ================= #
 @app.route("/api/retrain", methods=["POST"])
 def retrain_model():
-    global current_df, consumption_model, bill_model
-
+    global current_df, bill_model, energy_model
     if current_df.empty:
         return jsonify({"ok": False, "message": "⚠️ Upload data before retraining!"})
 
     try:
-        X = current_df.index.values.reshape(-1, 1)
-        y1 = current_df["Consumption_kWh"]
-        y2 = current_df["Bill_Amount"]
+        X = current_df[["Month_Index", "Consumption_kWh"]]
+        y = current_df["Bill_Amount"]
 
-        consumption_model = LinearRegression().fit(X, y1)
-        bill_model = LinearRegression().fit(X, y2)
-
-        return jsonify({"ok": True, "message": "✅ Models retrained successfully!"})
+        bill_model = LinearRegression().fit(X, y)
+        energy_model = LinearRegression().fit(current_df[["Month_Index"]], current_df["Consumption_kWh"])
+        return jsonify({"ok": True, "message": "✅ Model retrained successfully!"})
     except Exception as e:
         return jsonify({"ok": False, "message": f"❌ Retraining failed: {str(e)}"})
 
@@ -178,73 +174,54 @@ def retrain_model():
 @app.route("/api/insights_summary", methods=["POST"])
 def insights_summary():
     global current_df
-
     if current_df.empty:
-        return jsonify({
-            "ok": False,
-            "summary": "⚠️ No data available. Please upload a CSV first."
-        })
+        return jsonify({"ok": False, "summary": "⚠️ Upload a CSV first."})
 
-    try:
-        total_energy = current_df["Consumption_kWh"].sum()
-        avg_bill = current_df["Bill_Amount"].mean()
-        top_month = current_df.loc[current_df["Consumption_kWh"].idxmax(), "Month"]
-        top_usage = current_df["Consumption_kWh"].max()
-        low_month = current_df.loc[current_df["Consumption_kWh"].idxmin(), "Month"]
-        low_usage = current_df["Consumption_kWh"].min()
-        bill_per_kwh = (current_df["Bill_Amount"] / current_df["Consumption_kWh"].replace(0, 1)).mean()
+    total_energy = current_df["Consumption_kWh"].sum()
+    avg_bill = current_df["Bill_Amount"].mean()
+    top_month = current_df.loc[current_df["Consumption_kWh"].idxmax(), "Month"]
+    top_usage = current_df["Consumption_kWh"].max()
+    low_month = current_df.loc[current_df["Consumption_kWh"].idxmin(), "Month"]
+    low_usage = current_df["Consumption_kWh"].min()
+    bill_per_kwh = (current_df["Bill_Amount"] / current_df["Consumption_kWh"].replace(0, 1)).mean()
 
-        summary = f"""
-        🧠 **AI Energy Insights Summary**
+    summary = f"""
+    🧠 **AI Insights Summary**
+    • Total Energy: {total_energy:.2f} kWh
+    • Avg Monthly Bill: ₹{avg_bill:,.2f}
+    • Peak Month: {top_month} ({top_usage:.0f} kWh)
+    • Lowest: {low_month} ({low_usage:.0f} kWh)
+    • Efficiency: ₹{bill_per_kwh:.2f}/kWh
+    """
 
-        - Total consumption: **{total_energy:.2f} kWh**
-        - Average monthly bill: **₹{avg_bill:,.0f}**
-        - Peak consumption in **{top_month}** ({top_usage:.0f} kWh)
-        - Lowest in **{low_month}** ({low_usage:.0f} kWh)
-        - Avg cost efficiency: **₹{bill_per_kwh:.2f}/kWh**
-        """
-
-        return jsonify({"ok": True, "summary": summary})
-
-    except Exception as e:
-        return jsonify({"ok": False, "summary": f"⚠️ Summary generation failed: {str(e)}"})
+    return jsonify({"ok": True, "summary": summary})
 
 
-# ================= CHAT BOT ================= #
+# ================= CHAT ================= #
 @app.route("/api/insights_chat", methods=["POST"])
 def insights_chat():
     global current_df, chat_memory
-
     data = request.get_json()
     query = data.get("query", "").lower().strip()
 
     if current_df.empty:
-        return jsonify({
-            "ok": False,
-            "reply": "⚠️ No data available. Please upload your CSV first."
-        })
+        return jsonify({"ok": False, "reply": "⚠️ No data available. Upload CSV first."})
 
     total_energy = current_df["Consumption_kWh"].sum()
     avg_bill = current_df["Bill_Amount"].mean()
-    highest_month = current_df.loc[current_df["Consumption_kWh"].idxmax(), "Month"]
-    lowest_month = current_df.loc[current_df["Consumption_kWh"].idxmin(), "Month"]
+    high_month = current_df.loc[current_df["Consumption_kWh"].idxmax(), "Month"]
 
     if "bill" in query:
-        reply = f"💰 Your average monthly bill is ₹{avg_bill:.2f}. The highest was in {highest_month}."
-    elif "energy" in query or "usage" in query:
-        reply = f"⚡ Total recorded usage: {total_energy:.2f} kWh. Peak in {highest_month}, lowest in {lowest_month}."
-    elif "reduce" in query or "save" in query:
-        reply = "🔋 Try using appliances during off-peak hours and monitor top 3 high-consumption months."
+        reply = f"💰 The average monthly bill is ₹{avg_bill:.2f}. Peak month: {high_month}."
+    elif "reduce" in query:
+        reply = "💡 Reduce heavy-load usage during peak hours and check for power leaks."
     elif "predict" in query:
-        reply = "🔮 Use the 'Predict' feature to forecast upcoming month bills using AI regression."
-    elif "thanks" in query:
-        reply = "😊 You're welcome! You can ask for summaries or predictions anytime."
+        reply = "🔮 Use the Predict button to see next month’s energy and bill estimation."
     else:
-        reply = "🤖 I can analyze your energy trends, give insights, or forecast next month’s bill!"
+        reply = "🤖 I can help summarize trends, predict bills, or suggest optimizations."
 
     chat_memory.append({"user": query, "assistant": reply})
-    chat_memory = chat_memory[-5:]  # Limit memory
-
+    chat_memory = chat_memory[-5:]
     return jsonify({"ok": True, "reply": reply, "memory": chat_memory})
 
 
@@ -258,16 +235,6 @@ def login():
     if username == "admin" and password == "hitam123":
         return jsonify({"ok": True, "token": "secure_token"})
     return jsonify({"ok": False, "message": "Invalid credentials"})
-
-
-# ================= SAVE CHAT ================= #
-@app.route("/api/save_chat", methods=["POST"])
-def save_chat():
-    data = request.get_json()
-    user = data.get("user", "Anonymous")
-    conversation = data.get("conversation", [])
-    print(f"💾 Saved chat for {user} with {len(conversation)} messages")
-    return jsonify({"ok": True, "message": "Chat saved successfully!"})
 
 
 # ================= SERVER ================= #
