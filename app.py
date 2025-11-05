@@ -226,6 +226,16 @@ def login():
         return jsonify({"ok": True, "token": "secure_token"})
     return jsonify({"ok": False, "message": "Invalid credentials"})
 
+@app.route('/api/insights', methods=['GET'])
+def get_insights():
+    insights = [
+        {"id": 1, "title": "High Energy Usage in May", "detail": "Consider optimizing HVAC systems."},
+        {"id": 2, "title": "Peak Consumption Hours", "detail": "Between 2–5 PM; shifting loads may reduce bills."},
+        {"id": 3, "title": "Prediction Confidence", "detail": "Model accuracy is stable at 93.7%."}
+    ]
+    return jsonify({"ok": True, "insights": insights})
+
+
 
 # ================= RUN SERVER ================= #
 if __name__ == "__main__":
