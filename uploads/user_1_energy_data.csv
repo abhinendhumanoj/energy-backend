@@ -1,0 +1,4 @@
+Month,Classroom,Date,Energy_Consumption_kWh,Occupancy,Temperature_C,Total_Amount_Payable,Timestamp
+May,Block-A,2025-05-31,18439,0.75,32,235261,2025-05-31 12:00:00
+June,Block-A,2025-06-30,18004,0.78,30,217716,2025-06-30 12:00:00
+July,Block-A,2025-07-31,17607,0.72,29,207449,2025-07-31 12:00:00

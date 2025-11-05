@@ -1,0 +1,28 @@
+# =========================================
+# AI-Driven Energy Intelligence Consumption
+# Backend Dependencies — Python 3.13.7
+# =========================================
+
+# --- Core web framework ---
+Flask==3.0.3
+Flask-Cors==4.0.0
+
+# --- Data manipulation & CSV ---
+pandas==2.2.3
+numpy==2.1.3
+
+# --- Forecasting & ML ---
+statsmodels==0.14.4
+scikit-learn==1.6.0
+
+# --- Visualization (optional, backend analytics) ---
+matplotlib==3.9.2
+seaborn==0.13.2
+
+# --- Utils & helpers ---
+requests==2.32.3
+joblib==1.4.2
+pytz==2024.2
+
+# --- Deployment (optional) ---
+gunicorn==23.0.0
