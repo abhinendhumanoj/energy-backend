@@ -37,7 +37,7 @@ const UnifiedDashboard = () => {
     formData.append("file", file);
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/upload", {
+      const res = await fetch("https://energy-backend-99ip.onrender.com/api/upload", {
         method: "POST",
         body: formData,
       });
@@ -71,7 +71,7 @@ const UnifiedDashboard = () => {
     if (!selectedMonth) return alert("Please select a month to predict.");
 
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/predict", {
+      const res = await fetch("https://energy-backend-99ip.onrender.com/api/predict", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ month: selectedMonth }),
@@ -108,7 +108,7 @@ const UnifiedDashboard = () => {
   // 🔁 Retrain
   const handleRetrain = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:5000/api/retrain", {
+      const res = await fetch("https://energy-backend-99ip.onrender.com/api/retrain", {
         method: "POST",
       });
       const result = await res.json();
