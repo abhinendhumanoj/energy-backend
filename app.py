@@ -8,7 +8,8 @@ from sklearn.metrics import r2_score
 from textwrap import shorten
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": ["https://effervescent-longma-22d301.netlify.app"]}})
+
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
