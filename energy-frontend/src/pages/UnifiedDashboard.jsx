@@ -13,9 +13,12 @@ import {
 } from "recharts";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
+import { motion, AnimatePresence } from "framer-motion"; // 🎬 Animation library
 import hitamLogo from "../assets/hitam_logo.png";
+import { useLayout } from "../context/LayoutContext";
 
 const UnifiedDashboard = () => {
+  const { sidebarOpen } = useLayout();
   const [file, setFile] = useState(null);
   const [data, setData] = useState([]);
   const [metrics, setMetrics] = useState({
@@ -23,7 +26,6 @@ const UnifiedDashboard = () => {
     avgBill: 0,
     accuracy: 0,
   });
-  const [prediction, setPrediction] = useState(null);
   const [availableMonths, setAvailableMonths] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [history, setHistory] = useState([]);
@@ -53,7 +55,6 @@ const UnifiedDashboard = () => {
       }
     } catch (error) {
       console.warn("⚠️ Backend offline — loading mock data.");
-      // Offline fallback
       const mockData = [
         { Month: "Jan", Consumption_kWh: 420, Bill_Amount: 1800 },
         { Month: "Feb", Consumption_kWh: 460, Bill_Amount: 1900 },
@@ -80,7 +81,6 @@ const UnifiedDashboard = () => {
       const result = await res.json();
 
       if (result.ok) {
-        setPrediction(result.prediction);
         const newEntry = {
           month: result.month,
           predicted: result.prediction,
@@ -101,7 +101,6 @@ const UnifiedDashboard = () => {
         timestamp: new Date().toLocaleString(),
       };
       setHistory((prev) => [...prev, newEntry]);
-      setPrediction(mockValue);
     }
   };
 
@@ -133,7 +132,7 @@ const UnifiedDashboard = () => {
     link.click();
   };
 
-  // 📄 Export PDF (with logo, header, and footer)
+  // 📄 Export PDF
   const exportPDF = () => {
     if (history.length === 0) return alert("No history to export.");
     const doc = new jsPDF();
@@ -170,74 +169,41 @@ const UnifiedDashboard = () => {
     doc.save("AI_Prediction_History.pdf");
   };
 
+  // 🎬 Animation Variants
+  const chartVariant = {
+    hidden: { opacity: 0, scale: 0.95 },
+    visible: { opacity: 1, scale: 1 },
+  };
+
+  const rowVariant = {
+    hidden: { opacity: 0, x: -20 },
+    visible: { opacity: 1, x: 0 },
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#001f2e] to-[#003e47] text-white px-6 py-8">
-      {/* Header */}
-      <div className="flex items-center mb-10 space-x-4">
-        <img
-          src={hitamLogo}
-          alt="HITAM Logo"
-          className="w-16 h-16 rounded-full border-2 border-teal-400 shadow-lg"
-        />
-        <div>
-          <h1 className="text-3xl font-bold text-teal-400">
-            HITAM Energy Intelligence
-          </h1>
-          <p className="text-gray-400 text-sm">
-            Smart AI Energy Analytics Dashboard
-          </p>
-        </div>
-      </div>
-
-      {/* Summary Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
-        <div className="bg-[#07212e]/80 border border-teal-700 rounded-xl p-6 text-center shadow-lg">
-          <h2 className="text-lg font-semibold text-gray-300">Total Energy</h2>
-          <p className="text-2xl font-bold text-teal-400 mt-2">
-            {metrics.totalEnergy.toLocaleString()} kWh
-          </p>
-        </div>
-        <div className="bg-[#07212e]/80 border border-teal-700 rounded-xl p-6 text-center shadow-lg">
-          <h2 className="text-lg font-semibold text-gray-300">Average Bill</h2>
-          <p className="text-2xl font-bold text-blue-400 mt-2">
-            ₹ {metrics.avgBill.toLocaleString()}
-          </p>
-        </div>
-        <div className="bg-[#07212e]/80 border border-teal-700 rounded-xl p-6 text-center shadow-lg">
-          <h2 className="text-lg font-semibold text-gray-300">AI Accuracy</h2>
-          <p className="text-2xl font-bold text-green-400 mt-2">
-            {metrics.accuracy}%
-          </p>
-        </div>
-      </div>
-
-      {/* Upload Section */}
-      <div className="bg-[#07212e]/80 border border-teal-700 rounded-xl p-6 shadow-md mb-10">
-        <h2 className="text-xl font-semibold text-teal-300 mb-4">
-          📂 Upload Energy Data (CSV)
-        </h2>
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) => setFile(e.target.files[0])}
-            className="bg-[#0b2b3a] p-2 rounded-md text-gray-200 w-full md:w-2/3 border border-teal-600"
-          />
-          <button
-            onClick={handleUpload}
-            disabled={loading}
-            className="bg-teal-500 hover:bg-teal-400 px-6 py-2 rounded-md font-semibold"
-          >
-            {loading ? "Uploading..." : "Upload & Visualize"}
-          </button>
-        </div>
-      </div>
-
-      {/* Charts */}
+    <div
+      className={`min-h-screen transition-all duration-500 ease-in-out px-6 py-8 ${
+        sidebarOpen
+          ? "ml-64 bg-gradient-to-b from-[#001f2e] to-[#003e47]"
+          : "ml-20 bg-gradient-to-b from-[#001f2e] to-[#003e47]"
+      }`}
+    >
+      {/* 🎬 Animated Charts */}
       {data.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-          {/* Line Chart */}
-          <div className="bg-[#07212e]/80 rounded-xl p-6 border border-teal-800/40 shadow-md">
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={chartVariant}
+          transition={{ duration: 0.8 }}
+          className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10"
+        >
+          {/* ⚡ Line Chart Animation */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="bg-[#07212e]/80 rounded-xl p-6 border border-teal-800/40 shadow-md"
+          >
             <h2 className="text-lg font-semibold text-teal-300 mb-4">
               ⚡ Energy Consumption (kWh)
             </h2>
@@ -252,14 +218,23 @@ const UnifiedDashboard = () => {
                   type="monotone"
                   dataKey="Consumption_kWh"
                   stroke="#14b8a6"
-                  strokeWidth={2}
+                  strokeWidth={3}
+                  dot={false}
+                  isAnimationActive={true}
+                  animationDuration={2000}
+                  animationEasing="ease-in-out"
                 />
               </LineChart>
             </ResponsiveContainer>
-          </div>
+          </motion.div>
 
-          {/* Bar Chart */}
-          <div className="bg-[#07212e]/80 rounded-xl p-6 border border-teal-800/40 shadow-md">
+          {/* 💰 Bar Chart Animation */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, duration: 0.8 }}
+            className="bg-[#07212e]/80 rounded-xl p-6 border border-teal-800/40 shadow-md"
+          >
             <h2 className="text-lg font-semibold text-teal-300 mb-4">
               💰 Monthly Bill (₹)
             </h2>
@@ -270,16 +245,22 @@ const UnifiedDashboard = () => {
                 <YAxis stroke="#a3f0e4" />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="Bill_Amount" fill="#06b6d4" />
+                <Bar
+                  dataKey="Bill_Amount"
+                  fill="#06b6d4"
+                  animationDuration={1800}
+                  animationEasing="ease-out"
+                />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
 
-      {/* Prediction History */}
+      {/* 🕓 Animated Prediction History */}
       <div className="bg-[#07212e]/80 border border-teal-700/40 rounded-xl p-6">
-        <h2 className="text-xl font-semibold text-teal-300 mb-4">🤖 AI Prediction</h2>
+        <h2 className="text-xl font-semibold text-teal-300 mb-4">🤖 AI Prediction History</h2>
+
         <div className="flex flex-col md:flex-row gap-4 items-center mb-6">
           <input
             list="monthOptions"
@@ -303,58 +284,56 @@ const UnifiedDashboard = () => {
             onClick={handleRetrain}
             className="bg-green-500 hover:bg-green-400 px-4 py-2 rounded-md font-semibold"
           >
-            Retrain Model
+            Retrain
           </button>
         </div>
 
-        {/* History Table */}
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold text-teal-300 mb-3">
-            🕓 Prediction History
-          </h2>
-          {history.length === 0 ? (
-            <p className="text-gray-400">No predictions yet.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-teal-800/40 rounded-lg">
-                <thead className="bg-teal-800/40">
-                  <tr>
-                    <th className="p-3 text-left">Month</th>
-                    <th className="p-3 text-left">Predicted (kWh)</th>
-                    <th className="p-3 text-left">Predicted Bill (₹)</th>
-                    <th className="p-3 text-left">Timestamp</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((h, i) => (
-                    <tr
-                      key={i}
-                      className="border-t border-teal-700/40 hover:bg-[#0b2b3a]/40 transition"
-                    >
-                      <td className="p-3">{h.month}</td>
-                      <td className="p-3 text-yellow-300">{h.predicted}</td>
-                      <td className="p-3 text-blue-300">₹{h.bill}</td>
-                      <td className="p-3 text-gray-400">{h.timestamp}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex gap-4 mt-4">
-                <button
-                  onClick={exportCSV}
-                  className="bg-teal-500 hover:bg-teal-400 px-4 py-2 rounded-md font-semibold"
-                >
-                  Export CSV
-                </button>
-                <button
-                  onClick={exportPDF}
-                  className="bg-red-500 hover:bg-red-400 px-4 py-2 rounded-md font-semibold"
-                >
-                  Export PDF
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse border border-teal-800/40 rounded-lg">
+            <thead className="bg-teal-800/40">
+              <tr>
+                <th className="p-3 text-left">Month</th>
+                <th className="p-3 text-left">Predicted (kWh)</th>
+                <th className="p-3 text-left">Predicted Bill (₹)</th>
+                <th className="p-3 text-left">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              <AnimatePresence>
+                {history.map((h, i) => (
+                  <motion.tr
+                    key={i}
+                    variants={rowVariant}
+                    initial="hidden"
+                    animate="visible"
+                    exit="hidden"
+                    transition={{ delay: i * 0.1, duration: 0.4 }}
+                    className="border-t border-teal-700/40 hover:bg-[#0b2b3a]/40 transition"
+                  >
+                    <td className="p-3">{h.month}</td>
+                    <td className="p-3 text-yellow-300">{h.predicted}</td>
+                    <td className="p-3 text-blue-300">₹{h.bill}</td>
+                    <td className="p-3 text-gray-400">{h.timestamp}</td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+            </tbody>
+          </table>
+
+          <div className="flex gap-4 mt-4">
+            <button
+              onClick={exportCSV}
+              className="bg-teal-500 hover:bg-teal-400 px-4 py-2 rounded-md font-semibold"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={exportPDF}
+              className="bg-red-500 hover:bg-red-400 px-4 py-2 rounded-md font-semibold"
+            >
+              Export PDF
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import AIAssistant from "../components/AIAssistant";
+import { useLayout } from "../context/LayoutContext";
+
 import {
   Menu,
   X,
@@ -14,7 +16,8 @@ import {
 } from "lucide-react";
 
 const MainLayout = ({ children }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { sidebarOpen, setSidebarOpen } = useLayout();
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [username, setUsername] = useState("User");
   const [currentDate, setCurrentDate] = useState("");
   const [aiActive, setAiActive] = useState(false);
@@ -22,7 +25,7 @@ const MainLayout = ({ children }) => {
   const [showActions, setShowActions] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
 
-  // Set up header info
+  // Initialize user info and animation
   useEffect(() => {
     const storedUser = localStorage.getItem("username") || "HITAM Analyst";
     setUsername(storedUser);
@@ -44,7 +47,7 @@ const MainLayout = ({ children }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Search Suggestions
+  // Mock Search
   const mockData = [
     "Energy Consumption - September 2024",
     "Bill Report - July 2025",
@@ -73,36 +76,61 @@ const MainLayout = ({ children }) => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gradient-to-b from-[#001f2e] to-[#003e47] text-white transition-all duration-300">
-      {/* Sidebar */}
-      <div
-        className={`${
-          sidebarOpen ? "w-64" : "w-20"
-        } bg-[#041824] border-r border-teal-900/40 flex flex-col transition-all duration-300 relative`}
-      >
-        <div className="absolute top-4 right-4 cursor-pointer z-50">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-teal-400 hover:text-white transition-all"
-          >
-            {sidebarOpen ? <X size={22} /> : <Menu size={22} />}
-          </button>
-        </div>
+    <div className="flex h-screen bg-gradient-to-b from-[#001f2e] to-[#003e47] text-white overflow-hidden relative">
+      {/* =======================
+          ✅ Desktop Sidebar (Fixed)
+      ======================= */}
+      <div className="hidden md:block">
         <Sidebar isCollapsed={!sidebarOpen} />
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col transition-all duration-300">
-        {/* Header */}
-        <header className="flex flex-wrap items-center justify-between bg-[#06202b]/70 backdrop-blur-sm border-b border-teal-800/40 px-6 py-4 shadow-md gap-3">
-          {/* Date */}
-          <div className="flex items-center gap-2 text-teal-300">
-            <Calendar size={18} />
-            <span className="text-sm sm:text-base">{currentDate}</span>
+      {/* =======================
+          ✅ Mobile Sidebar (Slide-in)
+      ======================= */}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 bg-[#041C32] transform transition-transform duration-300 ease-in-out md:hidden
+        ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
+      >
+        <Sidebar isCollapsed={false} />
+      </div>
+
+      {/* Overlay for mobile */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* =======================
+          ✅ Main Content Area
+      ======================= */}
+      <div
+        className={`flex-1 flex flex-col transition-all duration-300 overflow-hidden ${
+          sidebarOpen ? "ml-64" : "ml-20"
+        } md:ml-64`}
+      >
+        {/* ===== Header ===== */}
+        <header className="flex flex-wrap items-center justify-between bg-[#06202b]/70 backdrop-blur-sm border-b border-teal-800/40 px-4 sm:px-6 py-4 shadow-md gap-3 sticky top-0 z-30">
+          {/* Left side: Menu (Mobile) + Date */}
+          <div className="flex items-center gap-3">
+            {/* Mobile toggle button */}
+            <button
+              className="md:hidden text-teal-400 hover:text-white transition-all"
+              onClick={() => setMobileOpen(!mobileOpen)}
+            >
+              {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+            </button>
+
+            {/* Date */}
+            <div className="flex items-center gap-2 text-teal-300">
+              <Calendar size={18} />
+              <span className="text-sm sm:text-base">{currentDate}</span>
+            </div>
           </div>
 
-          {/* Global Search */}
-          <div className="relative w-full sm:w-[40%] md:w-[35%]">
+          {/* Search Box */}
+          <div className="relative w-full sm:w-[50%] md:w-[35%]">
             <div className="flex items-center bg-[#073241]/60 px-3 py-2 rounded-lg border border-teal-800/40 focus-within:border-teal-400 transition-all">
               <Search size={18} className="text-gray-400 mr-2" />
               <input
@@ -128,10 +156,10 @@ const MainLayout = ({ children }) => {
             )}
           </div>
 
-          {/* Right side: AI Indicator + Actions + User */}
+          {/* Right Side: AI Indicator + Actions + User */}
           <div className="flex items-center gap-4 relative">
             {/* AI Status */}
-            <div className="flex items-center gap-2 text-gray-300">
+            <div className="hidden sm:flex items-center gap-2 text-gray-300">
               <Brain
                 size={18}
                 className={`${
@@ -154,7 +182,9 @@ const MainLayout = ({ children }) => {
                 className="flex items-center gap-1 bg-teal-600/40 hover:bg-teal-600/60 text-white px-3 py-2 rounded-md transition"
               >
                 <Lightbulb size={16} />
-                <span className="text-sm font-medium">Quick Actions</span>
+                <span className="text-sm font-medium hidden sm:block">
+                  Quick Actions
+                </span>
                 <ChevronDown size={14} />
               </button>
 
@@ -193,18 +223,22 @@ const MainLayout = ({ children }) => {
               )}
             </div>
 
-            {/* User Display */}
+            {/* User */}
             <div className="flex items-center gap-2 text-teal-300">
               <div className="w-8 h-8 bg-teal-500/40 rounded-full flex items-center justify-center font-semibold">
                 {username.charAt(0).toUpperCase()}
               </div>
-              <span className="font-medium text-sm sm:text-base">{username}</span>
+              <span className="font-medium text-sm sm:text-base hidden sm:block">
+                {username}
+              </span>
             </div>
           </div>
         </header>
 
-        {/* Main Page Content */}
+        {/* ===== Scrollable Page Content ===== */}
         <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+
+        {/* ===== AI Assistant ===== */}
         <AIAssistant />
       </div>
     </div>

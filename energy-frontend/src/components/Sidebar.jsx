@@ -14,12 +14,15 @@ const Sidebar = ({ isCollapsed }) => {
 
   return (
     <aside
-      className={`flex flex-col justify-between p-4 ${
-        isCollapsed ? "items-center" : "items-start"
-      } transition-all duration-300`}
+      className={`fixed top-0 left-0 h-full bg-[#041C32] text-white flex flex-col justify-between p-4 shadow-lg z-50
+        ${isCollapsed ? "w-20" : "w-64"} transition-all duration-300`}
     >
       {/* Logo */}
-      <div className={`flex flex-col items-center mb-6 transition-all duration-300`}>
+      <div
+        className={`flex flex-col items-center mb-6 transition-all duration-300 ${
+          isCollapsed ? "mt-4" : "mt-2"
+        }`}
+      >
         <img
           src={hitamLogo}
           alt="HITAM Logo"
@@ -35,7 +38,11 @@ const Sidebar = ({ isCollapsed }) => {
       </div>
 
       {/* Navigation */}
-      <nav className={`flex flex-col ${isCollapsed ? "items-center" : "w-full"} gap-3`}>
+      <nav
+        className={`flex flex-col ${
+          isCollapsed ? "items-center" : "w-full"
+        } gap-3`}
+      >
         {menuItems.map((item) => (
           <button
             key={item.path}
